@@ -44,6 +44,8 @@ async function fetchLeaguePlayers(leagueId, leagueName) {
     }
 
     const data = await response.json();
+    console.log("Status:", response.status);
+    console.log("Results returned:", data.response ? data.response.length : "NO RESPONSE");
 
     if (!data.response || data.response.length === 0) break;
 
