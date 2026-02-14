@@ -2,7 +2,12 @@ import fs from "fs";
 import fetch from "node-fetch";
 
 const API_KEY = process.env.API_KEY;
-const SEASON = 2024;
+const currentYear = new Date().getFullYear();
+const currentMonth = new Date().getMonth() + 1;
+
+// If before July → use previous season
+const SEASON = currentMonth < 7 ? currentYear - 1 : currentYear;
+
 
 // Big 5 + K League 1
 const LEAGUES = [
