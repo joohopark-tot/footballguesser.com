@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta name="google-site-verification" content="vmXWJlLdckrKIGnpPbGD2qo3eubyiwz8FChm3yxJE0c" />
+    <meta charset="UTF-8">
+    <title>Ultimate 2026 Football Guessr - Big 5 + K League</title>
+    <style>
+        body { background:#0f172a; color:white; font-family: 'Segoe UI', sans-serif; text-align:center; padding: 20px; }
+        .game-container { max-width: 1100px; margin: 0 auto; position: relative; }
+        input { padding:12px; width:350px; border-radius:8px; border:none; font-size:16px; margin-bottom:10px; outline: none; }
+        button { padding:12px 24px; border:none; border-radius:8px; background:#2563eb; color:white; cursor:pointer; font-weight:bold; margin: 5px; transition: 0.3s; }
+        button:hover { background: #3b82f6; transform: scale(1.05); }
+        button:disabled { background: #334155 !important; cursor: not-allowed; transform: none; }
+        #suggestions { background:#1e293b; width:350px; margin:0 auto; border-radius:8px; max-height:200px; overflow-y:auto; position: absolute; left: 50%; transform: translateX(-50%); z-index: 100; text-align: left; }
+        #suggestions div { padding:10px; cursor:pointer; border-bottom: 1px solid #334155; }
+        #suggestions div:hover { background: #334155; }
+        table { margin:30px auto; border-collapse:separate; border-spacing: 5px; width: 100%; }
+        td { padding:15px; border-radius:5px; font-weight:bold; min-width:90px; text-transform: uppercase; font-size: 11px; }
+        .green { background:#22c55e; } .yellow { background:#eab308; color:black; } .gray { background:#374151; }
+        .header-row td { background: none; color: #94a3b8; border: none; }
+    </style>
+</head>
+<body>
+
+<div class="game-container">
+    <h1>FOOTBALL GUESSER</h1>
+    <p id="status">Loading players...</p>
+
+    <div style="position: relative;">
+        <input type="text" id="guessInput" placeholder="Start typing player name..." oninput="showSuggestions()" autocomplete="off">
+        <div id="suggestions"></div>
+    </div>
+    <br>
+    <button onclick="checkGuess()">SUBMIT GUESS</button>
+    <button onclick="initGame()" style="background:#475569;">NEW GAME</button>
+    <button onclick="giveUp()" style="background:#ef4444;">GIVE UP</button>
+    <button id="hintBtn" onclick="gethint()" style="background: #16a34a;">HINT</button>
+
+    <table id="results">
+        <tr class="header-row">
+            <td>NAME</td><td>CLUB</td><td>LEAGUE</td><td>NATION</td><td>POS</td><td>AGE</td>
+        </tr>
+    </table>
+</div>
+
+<script type="module">
+let players = [];
+let secretPlayer, attempts;
+let hintLevel = 0;
+let hintsDisabled = false;
+let giveUpClicked = false;
+
+// Helper to remove accents for easier searching
+const slug = (str) => str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+// --- DATA LOADING ---
+async function loadData() {
+    try {
+        // This fetches the file created by your GitHub Action
+        const response = await fetch("./player.json");
+        players = await response.json();
+        document.getElementById("status").innerHTML = "Ready! Guess the 2026 star.";
+        initGame();
+    } catch (e) {
+        document.getElementById("status").innerHTML = "Error loading squads. Make sure player.json exists.";
+        console.error(e);
+    }
+}
+
+// --- GAME CORE ---
+function initGame() {
+    if (players.length === 0) return;
+
+    secretPlayer = players[Math.floor(Math.random() * players.length)];
+    attempts = 0;
+    hintLevel = 0;
+    hintsDisabled = false;
+    giveUpClicked = false;
+
+    // Reset UI
+    document.getElementById("results").innerHTML = `
+        <tr class="header-row">
+            <td>NAME</td><td>CLUB</td><td>LEAGUE</td><td>NATION</td><td>POS</td><td>AGE</td>
+        </tr>`;
+    document.getElementById("status").innerHTML = "Jooho's game for when they ban it (2026)";
+    
+    const input = document.getElementById("guessInput");
+    input.value = "";
+    input.disabled = false;
+
+    const hintBtn = document.getElementById("hintBtn");
+    hintBtn.disabled = false;
+    hintBtn.textContent = "HINT";
+    hintBtn.style.background = "#16a34a";
+
+    const giveUpBtn = document.querySelector("button[onclick='giveUp()']");
+    giveUpBtn.textContent = "GIVE UP";
+    giveUpBtn.disabled = false;
+    giveUpBtn.style.background = "#ef4444";
+}
+
+// --- SEARCH & SUGGESTIONS ---
+window.showSuggestions = function() {
+    const rawVal = document.getElementById("guessInput").value;
+    const val = slug(rawVal.trim());
+    const sugBox = document.getElementById("suggestions");
+    sugBox.innerHTML = "";
+
+    if (!val) return;
+
+    players
+        .filter(p => slug(p.name).includes(val))
+        .slice(0, 10)
+        .forEach(p => {
+            const d = document.createElement("div");
+            d.textContent = p.name;
+            d.onclick = () => {
+                document.getElementById("guessInput").value = p.name;
+                sugBox.innerHTML = "";
+            };
+            sugBox.appendChild(d);
+        });
+};
+
+// --- GUESS LOGIC ---
+window.checkGuess = function() {
+    const input = document.getElementById("guessInput");
+    const val = slug(input.value.trim());
+    
+    const guess = players.find(p => slug(p.name) === val);
+    if (!guess) return;
+
+    attempts++;
+    input.value = "";
+    document.getElementById("suggestions").innerHTML = "";
+
+    const row = document.getElementById("results").insertRow(1);
+    const createCell = (text, cls) => {
+        const c = row.insertCell();
+        c.textContent = text;
+        c.className = cls;
+    };
+
+    // NAME
+    createCell(guess.name, guess.name === secretPlayer.name ? "green" : "gray");
+
+    // CLUB (Yellow if same league but wrong club)
+    createCell(guess.club, 
+        guess.club === secretPlayer.club ? "green" : 
+        (guess.league === secretPlayer.league ? "yellow" : "gray")
+    );
+
+    // LEAGUE
+    createCell(guess.league, guess.league === secretPlayer.league ? "green" : "gray");
+
+    // NATION
+    createCell(guess.nationality, guess.nationality === secretPlayer.nationality ? "green" : "gray");
+
+    // POSITION
+    createCell(guess.position, guess.position === secretPlayer.position ? "green" : "gray");
+
+    // AGE
+    const arrow = guess.age < secretPlayer.age ? "↑" : guess.age > secretPlayer.age ? "↓" : "";
+    createCell(`${guess.age} ${arrow}`, guess.age === secretPlayer.age ? "green" : "yellow");
+
+    if (guess.name === secretPlayer.name) {
+        document.getElementById("status").innerHTML = `🏆 <b>Correct! It was ${secretPlayer.name}!</b>`;
+        document.getElementById("guessInput").disabled = true;
+    }
+};
+
+// --- HINTS ---
+window.gethint = function() {
+    if (!secretPlayer || hintsDisabled) return;
+    
+    hintLevel++;
+    const status = document.getElementById("status");
+    const btn = document.getElementById("hintBtn");
+    
+    if (hintLevel === 1) status.innerHTML = `📍 Hint 1: Nationality is <b>${secretPlayer.nationality}</b>`;
+    else if (hintLevel === 2) status.innerHTML = `🏃 Hint 2: Position is <b>${secretPlayer.position}</b>`;
+    else if (hintLevel === 3) status.innerHTML = `🎂 Hint 3: Age is <b>${secretPlayer.age}</b>`;
+    else if (hintLevel === 4) status.innerHTML = `🥈 Hint 4: League is <b>${secretPlayer.league}</b>`;
+    else if (hintLevel === 5) status.innerHTML = `🏠 Hint 5: Club is <b>${secretPlayer.club}</b>`;
+    else {
+        status.innerHTML = "🛑 <b>Give up already!</b>";
+        hintsDisabled = true;
+        btn.disabled = true;
+        btn.textContent = "LOCKED";
+    }
+};
+
+// --- GIVE UP ---
+window.giveUp = function() {
+    const btn = event.target;
+    if (!giveUpClicked) {
+        giveUpClicked = true;
+        btn.textContent = "ARE YOU SURE?";
+        btn.style.background = "#f59e0b";
+        return;
+    }
+
+    document.getElementById("status").innerHTML = `💀 You gave up! The player was <b>${secretPlayer.name}</b>`;
+    const row = document.getElementById("results").insertRow(1);
+    ["name", "club", "league", "nationality", "position", "age"].forEach(key => {
+        const c = row.insertCell();
+        c.textContent = secretPlayer[key];
+        c.className = "green";
+    });
+
+    document.getElementById("guessInput").disabled = true;
+    hintsDisabled = true;
+    btn.disabled = true;
+    btn.textContent = "GAVE UP";
+};
+
+window.initGame = initGame;
+loadData(); // Kick off the data loading
+
+</script>
+</body>
+</html>
