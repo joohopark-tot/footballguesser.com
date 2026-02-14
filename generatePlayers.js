@@ -1,95 +1,84 @@
-
 import fs from "fs";
 import fetch from "node-fetch";
 
 const API_KEY = process.env.API_KEY;
-const SEASON = 2025;
 
+const headers = {
+  "x-apisports-key": API_KEY,
+};
 
-
-// Big 5 + K League 1
-const LEAGUES = [
+const leagues = [
   { id: 39, name: "Premier League" },
   { id: 140, name: "La Liga" },
   { id: 135, name: "Serie A" },
   { id: 78, name: "Bundesliga" },
   { id: 61, name: "Ligue 1" },
-  { id: 292, name: "K League 1" }
+  { id: 292, name: "K League 1" },
 ];
 
-if (!API_KEY) {
-  console.error("API_KEY is missing.");
-  process.exit(1);
+const season = 2025;
+
+async function fetchTeams(leagueId) {
+  const url = `https://v3.football.api-sports.io/teams?league=${leagueId}&season=${season}`;
+
+  const response = await fetch(url, { headers });
+  const data = await response.json();
+
+  console.log(`League ${leagueId} teams:`, data.response.length);
+
+  return data.response || [];
 }
 
-async function fetchLeaguePlayers(leagueId, leagueName) {
-  let page = 1;
-  let allPlayers = [];
+async function fetchSquad(teamId) {
+  const url = `https://v3.football.api-sports.io/players/squads?team=${teamId}`;
 
-  while (true) {
-    console.log(`Fetching ${leagueName} page ${page}`);
+  const response = await fetch(url, { headers });
+  const data = await response.json();
 
-    const response = await fetch(
-      `https://v3.football.api-sports.io/players?league=${leagueId}&season=${SEASON}&page=${page}`,
-      {
-        headers: {
-          "x-apisports-key": API_KEY
-        }
+  if (!data.response || data.response.length === 0) {
+    return [];
+  }
+
+  return data.response[0].players || [];
+}
+
+async function generatePlayers() {
+  const allPlayers = [];
+
+  for (const league of leagues) {
+    console.log(`Fetching teams for ${league.name}`);
+
+    const teams = await fetchTeams(league.id);
+
+    for (const teamObj of teams) {
+      const team = teamObj.team;
+
+      console.log(`Fetching squad for ${team.name}`);
+
+      const squad = await fetchSquad(team.id);
+
+      for (const player of squad) {
+        allPlayers.push({
+          id: player.id,
+          name: player.name,
+          age: player.age,
+          number: player.number,
+          position: player.position,
+          photo: player.photo,
+          team: team.name,
+          teamLogo: team.logo,
+          league: league.name,
+        });
       }
-    );
 
-    if (!response.ok) {
-      console.error(`Error fetching ${leagueName}`);
-      break;
+      // Small delay to avoid rate limit
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
-
-    const data = await response.json();
-    console.log("Status:", response.status);
-    console.log("Results returned:", data.response ? data.response.length : "NO RESPONSE");
-
-    if (!data.response || data.response.length === 0) break;
-
-    for (const p of data.response) {
-      if (!p.player || !p.statistics || p.statistics.length === 0) continue;
-
-      const info = p.player;
-      const stats = p.statistics[0];
-
-      if (!stats.team || !stats.games) continue;
-
-      allPlayers.push({
-        name: info.name,
-        club: stats.team.name,
-        league: leagueName,
-        nationality: info.nationality,
-        position: stats.games.position,
-        age: info.age
-      });
-    }
-
-    page++;
   }
 
-  return allPlayers;
+  console.log(`Total players collected: ${allPlayers.length}`);
+
+  fs.writeFileSync("player.json", JSON.stringify(allPlayers, null, 2));
 }
 
-async function generate() {
-  let combined = [];
-
-  for (const league of LEAGUES) {
-    const players = await fetchLeaguePlayers(league.id, league.name);
-    combined = combined.concat(players);
-  }
-
-  // Remove duplicates
-  const uniquePlayers = Array.from(
-    new Map(combined.map(p => [p.name + "_" + p.club, p])).values()
-  );
-
-  fs.writeFileSync("player.json", JSON.stringify(uniquePlayers, null, 2));
-
-  console.log(`Saved ${uniquePlayers.length} players to player.json`);
-}
-
-generate();
-
+generatePlayers();
