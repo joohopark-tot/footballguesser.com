@@ -59,6 +59,7 @@ async function loadData() {
         // This fetches the file created by your GitHub Action
         const response = await fetch("./player.json");
         players = await response.json();
+        console.log("Total players loaded:", players.length);
         document.getElementById("status").innerHTML = "Ready! Guess the 2026 star.";
         initGame();
     } catch (e) {
